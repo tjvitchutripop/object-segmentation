@@ -1,5 +1,5 @@
 [project]
-name = "python-pkg-template"
+name = "python-ml-project-template"
 version = "0.1.0"
 description = "A Python Package Template"
 readme = "README.md"
@@ -41,7 +41,7 @@ build_docs = [
 where = ["src"]
 
 [tool.setuptools.package-data]
-python_pkg_template = ["py.typed"]
+python_ml_project_template = ["py.typed"]
 
 [tool.isort]
 profile = "black"

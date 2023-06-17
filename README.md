@@ -1,6 +1,12 @@
-# python_pkg_template
+# python_ml_project_template
 
-This is a template for a python package with the following features:
+This is a template for a Python Machine Learning project with the following features:
+
+* [Weights and Biases](wandb.ai) support, for experiment tracking and visualization
+* [Hydra](https://hydra.cc/) support, for configuration management
+* [Pytorch Lightning](https://www.pytorchlightning.ai/) support, for training and logging
+
+In addition, it contains all the good features from the original version of this repository (and is a proper Python package):
 
 * Installable via `pip install`. Anyone can point directly to this Github repository and install your project, either as a regular dependency or as an editable one.
 * Uses the new [PEP 518, officially-recommended pyproject.toml](https://pip.pypa.io/en/stable/reference/build-system/pyproject-toml/) structure for defining project structure and dependencies (instead of requirements.txt)
@@ -13,4 +19,4 @@ This is a template for a python package with the following features:
     * On a Pull Request: install dependencies, run style checks, run Python tests
     * After merge: same a Pull Request, but also deploy the docs site to the projects Github Pages URL!!!!
 
-All that needs doing is replacing all occurances of `python_pkg_template` and `python-pkg-template` with the name of your package(including the folder `src/python_pkg_template`), the rest should work out of the box!
+All that needs doing is replacing all occurances of `python_ml_project_template` and `python-ml-project-template` with the name of your package(including the folder `src/python_ml_project_template`), the rest should work out of the box!
