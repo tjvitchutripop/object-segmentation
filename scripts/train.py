@@ -1,22 +1,30 @@
-# This file is based on https://github.com/Lightning-AI/lightning#hello-simple-model
-
-from typing import Any
-
 import lightning as L
 import torch
 import torch.nn.functional as F
 import torch.utils.data as data
 import torchvision as tv
+import wandb
+from lightning.pytorch.callbacks import ModelCheckpoint
+from lightning.pytorch.loggers import WandbLogger
 from torch import optim
 from torchvision import transforms as T
 
+from python_ml_project_template.utils.script_utils import (
+    PROJECT_ROOT,
+    LogPredictionSamplesCallback,
+    match_fn,
+)
+
 # TODOs:
-# * Switch to CIFAR10
-# * Add a DataModule
-# * Add hydra configs
-# * Align the checkpoints and log files
-# * Add wandb, including saving the checkpoint, logging an image, and saving the codebase state.
-# * Add an eval script which loads from wandb, and outputs an artifact.
+# [x] Switch to CIFAR10
+# [ ] Add wandb, including saving the checkpoint, logging an image, and saving the codebase state.
+#     - [x] Add a callback to save the model to wandb.
+#     - [x] Add a callback to save the codebase to wandb.
+#     - [ ] Add an image logging example.
+# [ ] Add a DataModule
+# [ ] Add an eval script which loads from wandb, and outputs an artifact.
+# [ ] Add hydra configs
+# [ ] Align the checkpoints and log files
 
 
 class ClassifierModule(L.LightningModule):
@@ -28,7 +36,7 @@ class ClassifierModule(L.LightningModule):
     def forward(self, x):
         self.network(x)
 
-    def configure_optimizers(self) -> Any:
+    def configure_optimizers(self):
         optimizer = optim.AdamW(self.parameters(), lr=self.lr)
         lr_scheduler = optim.lr_scheduler.MultiStepLR(
             optimizer, milestones=[100, 150], gamma=0.1
@@ -43,17 +51,17 @@ class ClassifierModule(L.LightningModule):
 
         self.log("%s_loss" % mode, loss, prog_bar=mode == "train")
         self.log("%s_acc" % mode, acc)
-        return loss
+        return {"loss": loss, "acc": acc, "preds": preds}
 
     def training_step(self, batch, batch_idx):
         loss = self._calculate_loss(batch, mode="train")
         return loss
 
     def validation_step(self, batch, batch_idx):
-        self._calculate_loss(batch, mode="val")
+        return self._calculate_loss(batch, mode="val")
 
     def test_step(self, batch, batch_idx):
-        self._calculate_loss(batch, mode="test")
+        return self._calculate_loss(batch, mode="test")
 
 
 def main():
@@ -132,8 +140,6 @@ def main():
         num_heads=8,
         num_layers=6,
         patch_size=4,
-        # num_channels=3,
-        # num_patches=64,
         num_classes=10,
         representation_size=256,
         mlp_dim=2048,
@@ -141,13 +147,56 @@ def main():
     )
     model = ClassifierModule(network, lr=3e-4)
 
+    save_dir = "./wandb"
+    checkpoint_dir = "./checkpoints"
+
+    logger = WandbLogger(
+        project="lightning-hydra-template",
+        entity="r-pad",
+        log_model=True,  # Only log the last checkpoint to wandb, and only the LAST model checkpoint.
+        save_dir=save_dir,
+        config={"testit": "wat"},
+    )
+
     trainer = L.Trainer(
         accelerator="gpu",
         devices=1,
         precision="16-mixed",
-        max_epochs=180,
-        logger=False,
+        max_epochs=500,
+        logger=logger,
+        callbacks=[
+            LogPredictionSamplesCallback(logger),
+            # This checkpoint callback saves the latest model during training, i.e. so we can resume if it crashes.
+            # It saves everything, and you can load by referencing last.ckpt.
+            ModelCheckpoint(
+                checkpoint_dir,
+                filename="{epoch}-{step}",
+                monitor="step",
+                mode="max",
+                save_weights_only=False,
+                save_last=True,
+            ),
+            # This checkpoint will get saved to WandB. The Callback mechanism in lightning is poorly designed, so we have to put it last.
+            ModelCheckpoint(
+                checkpoint_dir,
+                filename="{epoch}-{step}-{val_loss:.2f}-weights-only",
+                monitor="val_loss",
+                mode="min",
+                save_weights_only=True,
+            ),
+        ],
     )
+
+    # Log the code used to train the model. Make sure not to log too much, because it will be too big.
+    wandb.run.log_code(
+        root=PROJECT_ROOT,
+        include_fn=match_fn(
+            dirs=["configs", "scripts", "src"],
+            extensions=[".py", ".yaml"],
+        ),
+    )
+
+    # Run training.
     trainer.fit(model, train_loader, val_loader)
 
 

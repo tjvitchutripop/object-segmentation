@@ -13,6 +13,7 @@ dependencies = [
   # CUDA 11.8
   "torch == 2.0.1",
   "torchvision == 0.15.2",
+  "wandb == 0.15.4",
 ]
 
 [build-system]
@@ -50,6 +51,7 @@ python_ml_project_template = ["py.typed"]
 
 [tool.isort]
 profile = "black"
+known_third_party = "wandb"
 
 [tool.mypy]
 python_version = 3.8
@@ -64,3 +66,6 @@ explicit_package_bases = true
 # module = [
 # ]
 # ignore_missing_imports = true
+
+[tool.pylint]
+known-third-party = "wandb"
