@@ -10,8 +10,10 @@ authors = [
 ]
 dependencies = [
   "lightning == 2.0.3",
+  "pandas",
   # CUDA 11.8
   "torch == 2.0.1",
+  "torchmetrics",
   "torchvision == 0.15.2",
   "wandb == 0.15.4",
 ]
