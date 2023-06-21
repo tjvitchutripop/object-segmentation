@@ -1,52 +1,72 @@
-from typing import Any
-
+import hydra
 import lightning as L
-import pandas as pd
+import omegaconf
 import torch
-import torchmetrics.functional.classification as tfc
-import torchvision as tv
+import torch.utils._pytree as pytree
 import wandb
 
 from python_ml_project_template.datasets.cifar10 import CIFAR10DataModule
-from python_ml_project_template.utils.script_utils import PROJECT_ROOT, match_fn
-
-
-class ClassifierEvalModule(L.LightningModule):
-    def __init__(self, network) -> None:
-        super().__init__()
-        self.network = network
-
-    def forward(self, x):
-        self.network(x)
-
-    def predict_step(self, batch: Any, batch_idx: int, dataloader_idx: int = 0) -> Any:
-        imgs, labels = batch
-        preds = self.network(imgs)
-        return {"preds": preds, "labels": labels}
+from python_ml_project_template.metrics.classification import get_metrics
+from python_ml_project_template.models.classifier import ClassifierInferenceModule
+from python_ml_project_template.utils.script_utils import (
+    PROJECT_ROOT,
+    create_model,
+    flatten_outputs,
+    match_fn,
+)
 
 
 @torch.no_grad()
-def main():
-    # Global seed for reproducibility.
-    L.seed_everything(42)
+@hydra.main(config_path="../configs", config_name="eval", version_base="1.3")
+def main(cfg):
+    ######################################################################
+    # Torch settings.
+    ######################################################################
+
+    # Make deterministic + reproducible.
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
     # Since most of us are training on 3090s+, we can use mixed precision.
     torch.set_float32_matmul_precision("medium")
-    # run_id = "pjf0nfg6"
-    run_id = "0v36p8tn"
-    checkpoint_reference = f"r-pad/lightning-hydra-template/model-{run_id}:v0"
 
-    # download checkpoint locally (if not already cached)
+    # Global seed for reproducibility.
+    L.seed_everything(42)
+
+    ######################################################################
+    # Create the datamodule.
+    # Should be the same one as in training, but we're gonna use val+test
+    # dataloaders.
+    ######################################################################
+
+    datamodule = CIFAR10DataModule(
+        root=cfg.dataset.data_dir,
+        batch_size=cfg.inference.batch_size,
+        num_workers=cfg.resources.num_workers,
+    )
+    # Gotta call this in order to establish the dataloaders.
+    datamodule.setup("predict")
+
+    ######################################################################
+    # Set up logging in WandB.
+    # This is a different job type (eval), but we want it all grouped
+    # together. Notice that we use our own logging here (not lightning).
+    ######################################################################
+
+    # Create a run.
     run = wandb.init(
-        entity="r-pad",
-        project="lightning-hydra-template",
-        job_type="eval",
-        group=f"experiment-{run_id}",
-        config={"eval config": "wat"},
+        entity=cfg.wandb.entity,
+        project=cfg.wandb.project,
+        dir=cfg.wandb.save_dir,
+        config=omegaconf.OmegaConf.to_container(
+            cfg, resolve=True, throw_on_missing=True
+        ),
+        job_type=cfg.job_type,
+        save_code=True,  # This just has the main script.
+        group=cfg.wandb.group,
     )
 
+    # Log the code.
     wandb.run.log_code(
         root=PROJECT_ROOT,
         include_fn=match_fn(
@@ -55,44 +75,77 @@ def main():
         ),
     )
 
-    network = tv.models.VisionTransformer(
-        image_size=32,
-        hidden_dim=512,
-        num_heads=8,
-        num_layers=6,
-        patch_size=4,
-        num_classes=10,
-        representation_size=256,
-        mlp_dim=2048,
-        dropout=0.2,
+    ######################################################################
+    # Create the network(s) which will be evaluated (same as training).
+    # You might want to put this into a "create_network" function
+    # somewhere so train and eval can be the same.
+    #
+    # We'll also load the weights.
+    ######################################################################
+
+    network = create_model(
+        image_size=cfg.dataset.image_size,
+        num_classes=cfg.dataset.num_classes,
+        model_cfg=cfg.model,
     )
 
-    artifact = run.use_artifact(checkpoint_reference, type="model")
-    # artifact_dir = artifact.download()
-    ckpt_file = artifact.get_path("model.ckpt").download()
+    # Get the checkpoint file. If it's a wandb reference, download.
+    # Otherwise look to disk.
+    checkpoint_reference = cfg.checkpoint.reference
+    if checkpoint_reference.startswith(cfg.wandb.entity):
+        # download checkpoint locally (if not already cached)
+        artifact_dir = cfg.wandb.artifact_dir
+        artifact = run.use_artifact(checkpoint_reference, type="model")
+        ckpt_file = artifact.get_path("model.ckpt").download(root=artifact_dir)
+    else:
+        ckpt_file = checkpoint_reference
 
+    # Load the network weights.
     ckpt = torch.load(ckpt_file)
-
     network.load_state_dict(
         {k.partition(".")[2]: v for k, v, in ckpt["state_dict"].items()}
     )
 
-    model = ClassifierEvalModule(network)
+    ######################################################################
+    # Create an inference module, which is basically just a bare-bones
+    # class which runs the model. In this example, we only implement
+    # the "predict_step" function, which may not be the blessed
+    # way to do it vis a vis lightning, but whatever.
+    #
+    # If this is a downstream application or something, you might
+    # want to implement a different interface (like with a "predict"
+    # function), so you can pass in un-batched observations from an
+    # environment, for instance.
+    ######################################################################
 
-    root = "./data"
-    datamodule = CIFAR10DataModule(root, batch_size=128, num_workers=4)
-    # Gotta call this in order to establish the dataloaders.
-    datamodule.setup("predict")
+    model = ClassifierInferenceModule(network)
+
+    ######################################################################
+    # Create the trainer.
+    # Bit of a misnomer here, we're not doing training. But we are gonna
+    # use it to set up the model appropriately and do all the batching
+    # etc.
+    #
+    # If this is a different kind of downstream eval, chuck this block.
+    ######################################################################
 
     trainer = L.Trainer(
         accelerator="gpu",
-        devices=1,
+        devices=cfg.resources.gpus,
         precision="16-mixed",
-        max_epochs=1,
         logger=False,
     )
 
-    train_preds, val_preds, test_preds = trainer.predict(
+    ######################################################################
+    # Run the model on the train/val/test sets.
+    # This outputs a list of dictionaries, one for each batch. This
+    # is annoying to work with, so later we'll flatten.
+    #
+    # If a downstream eval, you can swap it out with whatever the eval
+    # function is.
+    ######################################################################
+
+    train_outputs, val_outputs, test_outputs = trainer.predict(
         model,
         dataloaders=[
             *datamodule.val_dataloader(),  # There are two different loaders (train_val and val).
@@ -100,59 +153,27 @@ def main():
         ],
     )
 
-    # Each of these is a list of dictionaries, where each dictionary is the output of the predict_step method.
-    # We can use the `preds` and `labels` keys to calculate metrics.
-    # For example, we can calculate the accuracy like so:
-
-    for pred_list, name in [
-        (train_preds, "train"),
-        (val_preds, "val"),
-        (test_preds, "test"),
+    for outputs_list, name in [
+        (train_outputs, "train"),
+        (val_outputs, "val"),
+        (test_outputs, "test"),
     ]:
-        pass
+        # Put everything on CPU, and flatten a list of dicts into one dict.
+        out_cpu = [pytree.tree_map(lambda x: x.cpu(), o) for o in outputs_list]
+        outputs = flatten_outputs(out_cpu)
 
-        all_preds = torch.cat([x["preds"].cpu() for x in pred_list])
-        all_labels = torch.cat([x["labels"].cpu() for x in pred_list])
-        global_acc = (
-            tfc.multiclass_accuracy(
-                all_preds,
-                all_labels,
-                num_classes=10,
-                average="micro",
-            )
-            .numpy()
-            .item()
-        )
+        # Compute the metrics.
+        metrics = get_metrics(outputs["preds"], outputs["labels"])
+        global_acc = metrics["global_acc"]
+        macro_acc = metrics["macro_acc"]
+        acc_df = metrics["acc_df"]
 
-        macro_acc = (
-            tfc.multiclass_accuracy(
-                all_preds,
-                all_labels,
-                num_classes=10,
-                average="micro",
-            )
-            .numpy()
-            .item()
-        )
-
-        # We also want to log per-label accuracies.
-        acc_per_label = tfc.multiclass_accuracy(
-            all_preds,
-            all_labels,
-            num_classes=10,
-            average="none",
-        ).numpy()
-
-        # Create a dataframe with the per-label accuracies, as well as the global and macro accuracies.
-        # The columns of the table should be the labels, and there should only be a single row.
-        acc_df = pd.DataFrame(acc_per_label[None], columns=[str(i) for i in range(10)])
-
-        # Log the dataframe to wandb.
-        table = wandb.Table(dataframe=acc_df)
-        run.log({f"{name}_accuracy_table": table})
-
+        # Log the metrics + table to wandb.
         run.summary[f"{name}_true_accuracy"] = global_acc
         run.summary[f"{name}_class_balanced_accuracy"] = macro_acc
+
+        table = wandb.Table(dataframe=acc_df)
+        run.log({f"{name}_accuracy_table": table})
 
 
 if __name__ == "__main__":

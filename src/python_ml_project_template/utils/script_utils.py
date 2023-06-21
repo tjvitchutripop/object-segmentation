@@ -1,12 +1,32 @@
 import os
 import pathlib
-from typing import Sequence
+from typing import Dict, List, Sequence, Union
 
+import torch
+import torch.utils._pytree as pytree
+import torchvision as tv
 import wandb
 from lightning.pytorch import Callback
 from pytorch_lightning.loggers import WandbLogger
 
 PROJECT_ROOT = str(pathlib.Path(__file__).parent.parent.parent.parent.resolve())
+
+
+def create_model(image_size, num_classes, model_cfg):
+    if model_cfg.name == "vit":
+        return tv.models.VisionTransformer(
+            image_size=image_size,
+            num_classes=num_classes,
+            hidden_dim=model_cfg.hidden_dim,
+            num_heads=model_cfg.num_heads,
+            num_layers=model_cfg.num_layers,
+            patch_size=model_cfg.patch_size,
+            representation_size=model_cfg.representation_size,
+            mlp_dim=model_cfg.mlp_dim,
+            dropout=model_cfg.dropout,
+        )
+    else:
+        raise ValueError("not a valid model name")
 
 
 # This matching function
@@ -23,6 +43,21 @@ def match_fn(dirs: Sequence[str], extensions: Sequence[str], root: str = PROJECT
         return True
 
     return _match_fn
+
+
+TorchTree = Dict[str, Union[torch.Tensor, "TorchTree"]]
+
+
+def flatten_outputs(outputs: List[TorchTree]) -> TorchTree:
+    """Flatten a list of dictionaries into a single dictionary."""
+
+    # Concatenate all leaf nodes in the trees.
+    flattened_outputs = [pytree.tree_flatten(output) for output in outputs]
+    flattened_list = [o[0] for o in flattened_outputs]
+    flattened_spec = flattened_outputs[0][1]  # Spec definitely should be the same...
+    cat_flat = [torch.cat(x) for x in list(zip(*flattened_list))]
+    output_dict = pytree.tree_unflatten(cat_flat, flattened_spec)
+    return output_dict
 
 
 class LogPredictionSamplesCallback(Callback):
