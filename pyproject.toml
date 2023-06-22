@@ -33,6 +33,7 @@ develop = [
   "black == 23.3.0",
   "isort == 5.12.0",
   "mypy == 1.3.0",
+  "pandas-stubs == 2.0.2.230605",
   "pylint == 2.17.4",
   "pytest == 7.3.2",
   "pre-commit == 3.3.3",
@@ -64,11 +65,11 @@ mypy_path = "src"
 namespace_packages = true
 explicit_package_bases = true
 
-# # Uncomment this when you have imports for mypy to ignore.
-# [[tool.mypy.overrides]]
-# module = [
-# ]
-# ignore_missing_imports = true
+[[tool.mypy.overrides]]
+module = [
+  "torchvision.*",
+]
+ignore_missing_imports = true
 
 [tool.pylint]
 known-third-party = "wandb"

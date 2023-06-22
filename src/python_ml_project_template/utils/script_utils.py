@@ -1,6 +1,6 @@
 import os
 import pathlib
-from typing import Dict, List, Sequence, Union
+from typing import Dict, List, Sequence, Union, cast
 
 import torch
 import torch.utils._pytree as pytree
@@ -57,7 +57,7 @@ def flatten_outputs(outputs: List[TorchTree]) -> TorchTree:
     flattened_spec = flattened_outputs[0][1]  # Spec definitely should be the same...
     cat_flat = [torch.cat(x) for x in list(zip(*flattened_list))]
     output_dict = pytree.tree_unflatten(cat_flat, flattened_spec)
-    return output_dict
+    return cast(TorchTree, output_dict)
 
 
 class LogPredictionSamplesCallback(Callback):
