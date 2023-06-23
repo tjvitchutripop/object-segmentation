@@ -1,4 +1,4 @@
-# python_ml_project_template
+# object_segmentation
 
 This is a template for a Python Machine Learning project with the following features:
 
@@ -19,7 +19,7 @@ In addition, it contains all the good features from the original version of this
     * On a Pull Request: install dependencies, run style checks, run Python tests
     * After merge: same a Pull Request, but also deploy the docs site to the projects Github Pages URL!!!!
 
-All that needs doing is replacing all occurances of `python_ml_project_template` and `python-ml-project-template` with the name of your package(including the folder `src/python_ml_project_template`), the rest should work out of the box!
+All that needs doing is replacing all occurances of `object_segmentation` and `object-segmentation` with the name of your package(including the folder `src/object_segmentation`), the rest should work out of the box!
 
 ## Installation
 

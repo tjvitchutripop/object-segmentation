@@ -1,4 +1,4 @@
-# python_ml_project_template
+# object_segmentation
 
 Some sample text for the website.
 
