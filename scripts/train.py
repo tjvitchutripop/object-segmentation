@@ -9,7 +9,9 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.loggers import WandbLogger
 
 from object_segmentation.datasets.cifar10 import CIFAR10DataModule
+from object_segmentation.datasets.rlbench_phone import RLBenchPhoneDataModule
 from object_segmentation.models.classifier import ClassifierTrainingModule
+from object_segmentation.models.segmentor import SegmentorTrainingModule
 from object_segmentation.utils.script_utils import (
     PROJECT_ROOT,
     LogPredictionSamplesCallback,
@@ -50,7 +52,12 @@ def main(cfg):
     # or with an if statement, or by using hydra.instantiate.
     ######################################################################
 
-    datamodule = CIFAR10DataModule(
+    # datamodule = CIFAR10DataModule(
+    #     root=cfg.dataset.data_dir,
+    #     batch_size=cfg.training.batch_size,
+    #     num_workers=cfg.resources.num_workers,
+    # )
+    datamodule = RLBenchPhoneDataModule(
         root=cfg.dataset.data_dir,
         batch_size=cfg.training.batch_size,
         num_workers=cfg.resources.num_workers,
@@ -87,7 +94,9 @@ def main(cfg):
     # and the logging.
     ######################################################################
 
-    model = ClassifierTrainingModule(network, training_cfg=cfg.training)
+    # model = ClassifierTrainingModule(network, training_cfg=cfg.training)
+    model = SegmentorTrainingModule(network, training_cfg=cfg.training)
+
 
     ######################################################################
     # Set up logging in WandB.
@@ -103,7 +112,7 @@ def main(cfg):
     else:
         group = cfg.wandb.group
 
-    logger = WandbLogger(
+    wandb_logger = WandbLogger(
         entity=cfg.wandb.entity,
         project=cfg.wandb.project,
         log_model=True,  # Only log the last checkpoint to wandb, and only the LAST model checkpoint.
@@ -134,10 +143,10 @@ def main(cfg):
         devices=cfg.resources.gpus,
         precision="16-mixed",
         max_epochs=cfg.training.epochs,
-        logger=logger,
+        logger=wandb_logger,
         callbacks=[
             # Callback which logs whatever visuals (i.e. dataset examples, preds, etc.) we want.
-            LogPredictionSamplesCallback(logger),
+            LogPredictionSamplesCallback(wandb_logger),
             # This checkpoint callback saves the latest model during training, i.e. so we can resume if it crashes.
             # It saves everything, and you can load by referencing last.ckpt.
             ModelCheckpoint(

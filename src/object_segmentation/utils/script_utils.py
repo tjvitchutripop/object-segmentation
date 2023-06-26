@@ -8,6 +8,7 @@ import torchvision as tv
 import wandb
 from lightning.pytorch import Callback
 from pytorch_lightning.loggers import WandbLogger
+import numpy as np
 
 PROJECT_ROOT = str(pathlib.Path(__file__).parent.parent.parent.parent.resolve())
 
@@ -15,6 +16,18 @@ PROJECT_ROOT = str(pathlib.Path(__file__).parent.parent.parent.parent.resolve())
 def create_model(image_size, num_classes, model_cfg):
     if model_cfg.name == "vit":
         return tv.models.VisionTransformer(
+            image_size=image_size,
+            num_classes=num_classes,
+            hidden_dim=model_cfg.hidden_dim,
+            num_heads=model_cfg.num_heads,
+            num_layers=model_cfg.num_layers,
+            patch_size=model_cfg.patch_size,
+            representation_size=model_cfg.representation_size,
+            mlp_dim=model_cfg.mlp_dim,
+            dropout=model_cfg.dropout,
+        )
+    elif model_cfg.name == "deeplabv3":
+        return tv.models.segmentation.deeplabv3_resnet101(
             image_size=image_size,
             num_classes=num_classes,
             hidden_dim=model_cfg.hidden_dim,
@@ -77,19 +90,32 @@ class LogPredictionSamplesCallback(Callback):
             n = 20
             x, y = batch
             images = [img for img in x[:n]]
-            outs = outputs["preds"][:n].argmax(dim=1)
+            outs = outputs["preds"][:n]
             captions = [
                 f"Ground Truth: {y_i} - Prediction: {y_pred}"
                 for y_i, y_pred in zip(y[:n], outs)
             ]
 
-            # Option 1: log images with `WandbLogger.log_image`
-            self.logger.log_image(key="sample_images", images=images, caption=captions)
+            # # Option 1: log images with `WandbLogger.log_image`
+            # self.logger.log_image(key="sample_images", images=images, caption=captions)
 
             # Option 2: log images and predictions as a W&B Table
-            columns = ["image", "ground truth", "prediction"]
+            columns = ["image","ground truth","prediction"]
+            for x_i, y_i, y_pred in list(zip(x[:n], y[:n], outs)):
+                # print("y_pred",y_pred)
+                # print("y_pred_cleaned",np.where(y_pred.cpu().numpy()>0.5,1,0))
             data = [
-                [wandb.Image(x_i), y_i, y_pred]
-                for x_i, y_i, y_pred in list(zip(x[:n], y[:n], outs))
+                [wandb.Image(x_i),
+                 wandb.Image(x_i, masks={
+                    "ground truth":{
+                        "mask_data" : y_i,
+                    }
+                }),
+                wandb.Image(x_i, masks={
+                    "prediction":{
+                        "mask_data" : np.where(y_pred>0.5,1,0),
+                    }
+                })]
+                for x_i, y_i, y_pred in list(zip(x[:n].cpu(), y[:n].cpu().numpy(), outs.cpu().numpy()))
             ]
             self.logger.log_table(key="sample_table", columns=columns, data=data)

@@ -6,8 +6,10 @@ import torch.utils._pytree as pytree
 import wandb
 
 from object_segmentation.datasets.cifar10 import CIFAR10DataModule
+from object_segmentation.datasets.rlbench_phone import RLBenchPhoneDataModule
 from object_segmentation.metrics.classification import get_metrics
 from object_segmentation.models.classifier import ClassifierInferenceModule
+from object_segmentation.models.segmentor import SegmentorInferenceModule
 from object_segmentation.utils.script_utils import (
     PROJECT_ROOT,
     create_model,
@@ -39,7 +41,13 @@ def main(cfg):
     # dataloaders.
     ######################################################################
 
-    datamodule = CIFAR10DataModule(
+    # datamodule = CIFAR10DataModule(
+    #     root=cfg.dataset.data_dir,
+    #     batch_size=cfg.inference.batch_size,
+    #     num_workers=cfg.resources.num_workers,
+    # )
+
+    datamodule = RLBenchPhoneDataModule(
         root=cfg.dataset.data_dir,
         batch_size=cfg.inference.batch_size,
         num_workers=cfg.resources.num_workers,
@@ -118,7 +126,8 @@ def main(cfg):
     # environment, for instance.
     ######################################################################
 
-    model = ClassifierInferenceModule(network)
+    # model = ClassifierInferenceModule(network)
+    model = SegmentorInferenceModule(network)
 
     ######################################################################
     # Create the trainer.
