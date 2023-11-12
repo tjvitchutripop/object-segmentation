@@ -11,11 +11,11 @@ import pickle
 from PIL import Image
 
 
-class RLBenchPhone(VisionDataset):
+class RLBenchPegs(VisionDataset):
     """
     Args:
         root (string): Root directory of dataset where directory
-            ``rlbench-phone-py`` exists or will be saved to if download is set to True.
+            ``rlbench-shape-py`` exists or will be saved to if download is set to True.
         train (bool, optional): If True, creates dataset from training set, otherwise
             creates from test set.
         transform (callable, optional): A function/transform that takes in an PIL image
@@ -25,7 +25,7 @@ class RLBenchPhone(VisionDataset):
 
     """
 
-    base_folder = "pseudogt-phone-py"
+    base_folder = "pseudogt-pegs-py"
     train_range = (0,450)
     test_range = (450,500)
 
@@ -50,7 +50,7 @@ class RLBenchPhone(VisionDataset):
         self.targets = []
         # now load the picked numpy arrays
         for idx in data_range:
-            file_path = os.path.join(self.root, self.base_folder, "phone_on_base-method1-"+str(idx)+"-action_object.npz")
+            file_path = os.path.join(self.root, self.base_folder, "insert_onto_square_peg-"+str(idx)+"-action_object.npz")
             entry = np.load(file_path)
             self.data.append(entry["rgb"])
             self.targets.append(entry["gt"])
@@ -98,7 +98,7 @@ class RLBenchPhone(VisionDataset):
 
 
 
-class RLBenchPhoneDataModule(L.LightningDataModule):
+class RLBenchPegsDataModule(L.LightningDataModule):
     def __init__(self, root, batch_size, num_workers):
         super().__init__()
         self.root = root
@@ -136,10 +136,10 @@ class RLBenchPhoneDataModule(L.LightningDataModule):
 
         # We want to split the training set into train and val. But we don't want transforms on val.
         # So we create two datasets, and make sure that the split is consistent between them.
-        train_dataset = RLBenchPhone(
+        train_dataset = RLBenchPegs(
             self.root, train=True, transform=train_transform
         )
-        val_dataset = RLBenchPhone(
+        val_dataset = RLBenchPegs(
             self.root, train=True, transform=test_transform
         )
         generator = torch.Generator().manual_seed(42)
@@ -153,7 +153,7 @@ class RLBenchPhoneDataModule(L.LightningDataModule):
         self.val_set = val_set
 
         # Test set.
-        self.test_set = RLBenchPhone(
+        self.test_set = RLBenchPegs(
             self.root, train=False, transform=test_transform
         )
 

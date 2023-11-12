@@ -10,6 +10,14 @@ from lightning.pytorch.loggers import WandbLogger
 
 from object_segmentation.datasets.cifar10 import CIFAR10DataModule
 from object_segmentation.datasets.rlbench_phone import RLBenchPhoneDataModule
+from object_segmentation.datasets.rlbench_wine import RLBenchWineDataModule
+from object_segmentation.datasets.rlbench_robot import RLBenchRobotDataModule
+from object_segmentation.datasets.rlbench_shape import RLBenchShapeDataModule
+from object_segmentation.datasets.rlbench_pegs import RLBenchPegsDataModule
+from object_segmentation.datasets.pseudogt_shape import PseudoGTShapeDataModule
+from object_segmentation.datasets.pseudogt_pegs import PseudoGTPegsDataModule
+from object_segmentation.datasets.pseudogt_phone import PseudoGTPhoneDataModule
+from object_segmentation.datasets.rlbench_alltasks import RLBenchAllTasksDataModule
 from object_segmentation.models.classifier import ClassifierTrainingModule
 from object_segmentation.models.segmentor import SegmentorTrainingModule
 from object_segmentation.utils.script_utils import (
@@ -57,7 +65,7 @@ def main(cfg):
     #     batch_size=cfg.training.batch_size,
     #     num_workers=cfg.resources.num_workers,
     # )
-    datamodule = RLBenchPhoneDataModule(
+    datamodule = RLBenchAllTasksDataModule(
         root=cfg.dataset.data_dir,
         batch_size=cfg.training.batch_size,
         num_workers=cfg.resources.num_workers,
@@ -147,6 +155,16 @@ def main(cfg):
         callbacks=[
             # Callback which logs whatever visuals (i.e. dataset examples, preds, etc.) we want.
             LogPredictionSamplesCallback(wandb_logger),
+            # # Checkpoint callback to save the model every 20 epochs.
+            # ModelCheckpoint(
+            #     dirpath=cfg.lightning.checkpoint_dir,
+            #     filename="{epoch}-{step}-weights-only",
+            #     monitor="step",
+            #     mode="max",
+            #     save_weights_only=True,
+            #     every_n_epochs=20,
+            #     save_top_k = -1,
+            # ),
             # This checkpoint callback saves the latest model during training, i.e. so we can resume if it crashes.
             # It saves everything, and you can load by referencing last.ckpt.
             ModelCheckpoint(

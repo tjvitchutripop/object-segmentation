@@ -1,0 +1,4 @@
+name: rlbenchalltasks
+data_dir: ${hydra:runtime.cwd}/data
+image_size: 640
+num_classes: 1

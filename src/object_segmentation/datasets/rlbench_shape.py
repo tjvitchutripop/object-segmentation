@@ -9,13 +9,17 @@ from typing import Any, Callable, Optional, Tuple
 import numpy as np
 import pickle
 from PIL import Image
+import clip
+import random
 
 
-class RLBenchPhone(VisionDataset):
+
+
+class RLBenchShape(VisionDataset):
     """
     Args:
         root (string): Root directory of dataset where directory
-            ``rlbench-phone-py`` exists or will be saved to if download is set to True.
+            ``rlbench-shape-py`` exists or will be saved to if download is set to True.
         train (bool, optional): If True, creates dataset from training set, otherwise
             creates from test set.
         transform (callable, optional): A function/transform that takes in an PIL image
@@ -25,7 +29,7 @@ class RLBenchPhone(VisionDataset):
 
     """
 
-    base_folder = "pseudogt-phone-py"
+    base_folder = "pseudogt-shape-py (method 3)"
     train_range = (0,450)
     test_range = (450,500)
 
@@ -50,22 +54,10 @@ class RLBenchPhone(VisionDataset):
         self.targets = []
         # now load the picked numpy arrays
         for idx in data_range:
-            file_path = os.path.join(self.root, self.base_folder, "phone_on_base-method1-"+str(idx)+"-action_object.npz")
+            file_path = os.path.join(self.root, self.base_folder, "place_shape_in_shape_sorter-"+str(idx)+"-action_object.npz")
             entry = np.load(file_path)
-            self.data.append(entry["rgb"])
+            self.data.append([entry["rgb"],random.choice(entry["desc"])])
             self.targets.append(entry["gt"])
-
-        # self.data = np.vstack(self.data).reshape(-1, 3, 32, 32)
-        # self.data = self.data.transpose((0, 2, 3, 1))  # convert to HWC
-
-    #     self._load_meta()
-
-    # def _load_meta(self) -> None:
-    #     path = os.path.join(self.root, self.base_folder, self.meta["filename"])
-    #     with open(path, "rb") as infile:
-    #         data = pickle.load(infile, encoding="latin1")
-    #         self.classes = data[self.meta["key"]]
-    #     self.class_to_idx = {_class: i for i, _class in enumerate(self.classes)}
 
     def __getitem__(self, index: int) -> Tuple[Any, Any]:
         """
@@ -75,19 +67,15 @@ class RLBenchPhone(VisionDataset):
         Returns:
             tuple: (image, target) where target is index of the target class.
         """
-        img, target = self.data[index], self.targets[index]
-
-        # doing this so that it is consistent with all other datasets
-        # to return a PIL Image
-        img = Image.fromarray(img)
-
+        data, target = self.data[index], self.targets[index]
+        # Image transformations
+        data[0] = Image.fromarray(data[0])
         if self.transform is not None:
-            img = self.transform(img)
-
+            img = self.transform(data[0])
         if self.target_transform is not None:
             target = self.target_transform(target)
-
-        return img, target
+        
+        return img, target, data[1]
 
     def __len__(self) -> int:
         return len(self.data)
@@ -98,7 +86,7 @@ class RLBenchPhone(VisionDataset):
 
 
 
-class RLBenchPhoneDataModule(L.LightningDataModule):
+class RLBenchShapeDataModule(L.LightningDataModule):
     def __init__(self, root, batch_size, num_workers):
         super().__init__()
         self.root = root
@@ -136,10 +124,10 @@ class RLBenchPhoneDataModule(L.LightningDataModule):
 
         # We want to split the training set into train and val. But we don't want transforms on val.
         # So we create two datasets, and make sure that the split is consistent between them.
-        train_dataset = RLBenchPhone(
+        train_dataset = RLBenchShape(
             self.root, train=True, transform=train_transform
         )
-        val_dataset = RLBenchPhone(
+        val_dataset = RLBenchShape(
             self.root, train=True, transform=test_transform
         )
         generator = torch.Generator().manual_seed(42)
@@ -153,7 +141,7 @@ class RLBenchPhoneDataModule(L.LightningDataModule):
         self.val_set = val_set
 
         # Test set.
-        self.test_set = RLBenchPhone(
+        self.test_set = RLBenchShape(
             self.root, train=False, transform=test_transform
         )
 

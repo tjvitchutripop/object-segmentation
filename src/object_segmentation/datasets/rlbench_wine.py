@@ -11,7 +11,7 @@ import pickle
 from PIL import Image
 
 
-class RLBenchPhone(VisionDataset):
+class RLBenchWine(VisionDataset):
     """
     Args:
         root (string): Root directory of dataset where directory
@@ -25,7 +25,7 @@ class RLBenchPhone(VisionDataset):
 
     """
 
-    base_folder = "pseudogt-phone-py"
+    base_folder = "rlbench-wine-py"
     train_range = (0,450)
     test_range = (450,500)
 
@@ -48,12 +48,13 @@ class RLBenchPhone(VisionDataset):
 
         self.data: Any = []
         self.targets = []
+
         # now load the picked numpy arrays
         for idx in data_range:
-            file_path = os.path.join(self.root, self.base_folder, "phone_on_base-method1-"+str(idx)+"-action_object.npz")
+            file_path = os.path.join(self.root, self.base_folder, "stack_wine-"+str(idx)+"-front-no_gripper.npz")
             entry = np.load(file_path)
             self.data.append(entry["rgb"])
-            self.targets.append(entry["gt"])
+            self.targets.append(entry["mask"])
 
         # self.data = np.vstack(self.data).reshape(-1, 3, 32, 32)
         # self.data = self.data.transpose((0, 2, 3, 1))  # convert to HWC
@@ -98,7 +99,7 @@ class RLBenchPhone(VisionDataset):
 
 
 
-class RLBenchPhoneDataModule(L.LightningDataModule):
+class RLBenchWineDataModule(L.LightningDataModule):
     def __init__(self, root, batch_size, num_workers):
         super().__init__()
         self.root = root
@@ -136,10 +137,10 @@ class RLBenchPhoneDataModule(L.LightningDataModule):
 
         # We want to split the training set into train and val. But we don't want transforms on val.
         # So we create two datasets, and make sure that the split is consistent between them.
-        train_dataset = RLBenchPhone(
+        train_dataset = RLBenchWine(
             self.root, train=True, transform=train_transform
         )
-        val_dataset = RLBenchPhone(
+        val_dataset = RLBenchWine(
             self.root, train=True, transform=test_transform
         )
         generator = torch.Generator().manual_seed(42)
@@ -153,7 +154,7 @@ class RLBenchPhoneDataModule(L.LightningDataModule):
         self.val_set = val_set
 
         # Test set.
-        self.test_set = RLBenchPhone(
+        self.test_set = RLBenchWine(
             self.root, train=False, transform=test_transform
         )
 

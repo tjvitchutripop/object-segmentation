@@ -3,8 +3,10 @@ from typing import Any
 import lightning as L
 import torch.nn.functional as F
 from torch import optim
+from object_segmentation.metrics.segmentation import get_metrics
 import torch
 from torchmetrics import JaccardIndex
+
 
 
 class SegmentorTrainingModule(L.LightningModule):
@@ -24,21 +26,18 @@ class SegmentorTrainingModule(L.LightningModule):
         return [optimizer]#, [lr_scheduler]
 
     def _calculate_loss(self, batch, mode="train"):
-        imgs, target = batch
-        preds = self.network(imgs)
+        imgs, target, text = batch
+        preds = self.network(imgs, text)
         preds = preds["out"].squeeze()
-        # print("preds", preds.shape)
-        # print("target", target.shape)
-        loss = F.binary_cross_entropy_with_logits(preds.float(), target.float())
+        target = target.squeeze().to(torch.float32)
+        loss = F.binary_cross_entropy_with_logits(preds, target)
         istrain = mode == "train"
-        self.log("%s_loss" % mode, loss, prog_bar=istrain, add_dataloader_idx=False)
         preds = preds.to(torch.float32)
         jaccard = JaccardIndex(task="binary", num_classes=1).to(torch.device('cuda'))
         average_iou = jaccard(preds, target)
+        self.log("%s_loss" % mode, loss, prog_bar=istrain, add_dataloader_idx=False)
         self.log("%s_average_iou" % mode, average_iou, add_dataloader_idx=False)
-        # self.log("%s_acc" % mode, acc, add_dataloader_idx=False)
-        # return {"loss": loss, "acc": acc, "preds": preds}
-        return {"loss": loss, "preds": preds}
+        return {"loss": loss, "preds": preds, "average_iou":average_iou}
 
     def training_step(self, batch, batch_idx):
         loss = self._calculate_loss(batch, mode="train")
@@ -64,6 +63,6 @@ class SegmentorInferenceModule(L.LightningModule):
         self.network(x)
 
     def predict_step(self, batch: Any, batch_idx: int, dataloader_idx: int = 0) -> Any:
-        imgs, target = batch
-        preds = self.network(imgs)
-        return {"imgs":imgs, "preds": preds, "target": target}
+        imgs, target, text = batch
+        preds = self.network(imgs, text)
+        return {"imgs": imgs, "preds": preds, "target": target, "text":text}

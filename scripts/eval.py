@@ -4,10 +4,16 @@ import omegaconf
 import torch
 import torch.utils._pytree as pytree
 import wandb
+import numpy as np
 
 from object_segmentation.datasets.cifar10 import CIFAR10DataModule
 from object_segmentation.datasets.rlbench_phone import RLBenchPhoneDataModule
-from object_segmentation.metrics.classification import get_metrics
+from object_segmentation.datasets.rlbench_wine import RLBenchWineDataModule
+from object_segmentation.datasets.rlbench_robot import RLBenchRobotDataModule
+from object_segmentation.datasets.rlbench_shape import RLBenchShapeDataModule
+from object_segmentation.datasets.rlbench_alltasks import RLBenchAllTasksDataModule
+from object_segmentation.datasets.rlbench_pegs import RLBenchPegsDataModule
+from object_segmentation.metrics.segmentation import get_metrics
 from object_segmentation.models.classifier import ClassifierInferenceModule
 from object_segmentation.models.segmentor import SegmentorInferenceModule
 from object_segmentation.utils.script_utils import (
@@ -47,7 +53,7 @@ def main(cfg):
     #     num_workers=cfg.resources.num_workers,
     # )
 
-    datamodule = RLBenchPhoneDataModule(
+    datamodule = RLBenchAllTasksDataModule(
         root=cfg.dataset.data_dir,
         batch_size=cfg.inference.batch_size,
         num_workers=cfg.resources.num_workers,
@@ -99,14 +105,15 @@ def main(cfg):
 
     # Get the checkpoint file. If it's a wandb reference, download.
     # Otherwise look to disk.
-    checkpoint_reference = cfg.checkpoint.reference
-    if checkpoint_reference.startswith(cfg.wandb.entity):
-        # download checkpoint locally (if not already cached)
-        artifact_dir = cfg.wandb.artifact_dir
-        artifact = run.use_artifact(checkpoint_reference, type="model")
-        ckpt_file = artifact.get_path("model.ckpt").download(root=artifact_dir)
-    else:
-        ckpt_file = checkpoint_reference
+    # checkpoint_reference = cfg.checkpoint.reference
+    # if checkpoint_reference.startswith(cfg.wandb.entity):
+    #     # download checkpoint locally (if not already cached)
+    #     artifact_dir = cfg.wandb.artifact_dir
+    #     artifact = run.use_artifact(checkpoint_reference, type="model")
+    #     ckpt_file = artifact.get_path("model.ckpt").download(root=artifact_dir)
+    # else:
+
+    ckpt_file = "/home/tj/Documents/segmentation-model/object-segmentation/logs/train_rlbenchalltasks/2023-10-31/13-22-48/checkpoints/epoch=791-step=133848.ckpt"
 
     # Load the network weights.
     ckpt = torch.load(ckpt_file)
@@ -170,19 +177,32 @@ def main(cfg):
         # Put everything on CPU, and flatten a list of dicts into one dict.
         out_cpu = [pytree.tree_map(lambda x: x.cpu(), o) for o in outputs_list]
         outputs = flatten_outputs(out_cpu)
-
         # Compute the metrics.
-        metrics = get_metrics(outputs["preds"], outputs["labels"])
-        global_acc = metrics["global_acc"]
-        macro_acc = metrics["macro_acc"]
-        acc_df = metrics["acc_df"]
+        metrics = get_metrics(outputs["preds"], outputs["target"])
+        average_iou = metrics["average_iou"]
 
         # Log the metrics + table to wandb.
-        run.summary[f"{name}_true_accuracy"] = global_acc
-        run.summary[f"{name}_class_balanced_accuracy"] = macro_acc
-
-        table = wandb.Table(dataframe=acc_df)
-        run.log({f"{name}_accuracy_table": table})
+        run.summary[f"{name}_average_iou"] = average_iou
+        if name == "test":
+            columns = ["image","ground truth","prediction"]
+            sigmoid_func = torch.nn.Sigmoid()
+            predictions = sigmoid_func(outputs["preds"]["out"].squeeze().to(torch.float32))
+            data = [
+                [wandb.Image(x_i),
+                 wandb.Image(x_i, masks={
+                    "ground truth":{
+                        "mask_data" : y_i,
+                    }
+                }),
+                wandb.Image(x_i, masks={
+                    "prediction":{
+                        "mask_data" : np.where(y_pred>0.5,1,0),
+                    }
+                })]
+                for x_i, y_i, y_pred in list(zip(outputs["imgs"].cpu(), outputs["target"].cpu().numpy(), predictions.cpu().numpy()))
+            ]
+            table = wandb.Table(columns=columns, data=data)
+            run.log({f"{name}_result_table": table})
 
 
 if __name__ == "__main__":

@@ -11,11 +11,11 @@ import pickle
 from PIL import Image
 
 
-class RLBenchPhone(VisionDataset):
+class RLBenchAllTasks(VisionDataset):
     """
     Args:
         root (string): Root directory of dataset where directory
-            ``rlbench-phone-py`` exists or will be saved to if download is set to True.
+            ``rlbench-shape-py`` exists or will be saved to if download is set to True.
         train (bool, optional): If True, creates dataset from training set, otherwise
             creates from test set.
         transform (callable, optional): A function/transform that takes in an PIL image
@@ -25,9 +25,9 @@ class RLBenchPhone(VisionDataset):
 
     """
 
-    base_folder = "pseudogt-phone-py"
-    train_range = (0,450)
-    test_range = (450,500)
+    base_folder = "rlbench-alltasks-py"
+    # train_range = (0,873)
+    # test_range = (873,969)
 
     def __init__(
         self,
@@ -41,19 +41,20 @@ class RLBenchPhone(VisionDataset):
 
         self.train = train  # training set or test set
 
-        if self.train:
-            data_range = range(self.train_range[0],self.train_range[1])
-        else:
-            data_range = range(self.test_range[0],self.test_range[1])
+        # if self.train:
+        #     data_range = range(self.train_range[0],self.train_range[1])
+        # else:
+        #     data_range = range(self.test_range[0],self.test_range[1])
 
         self.data: Any = []
         self.targets = []
+        files = os.listdir(os.path.join(self.root, self.base_folder))
+        files_sorted = sorted(files)
         # now load the picked numpy arrays
-        for idx in data_range:
-            file_path = os.path.join(self.root, self.base_folder, "phone_on_base-method1-"+str(idx)+"-action_object.npz")
-            entry = np.load(file_path)
-            self.data.append(entry["rgb"])
-            self.targets.append(entry["gt"])
+        for file in files_sorted:
+            entry = np.load(os.path.join(self.root, self.base_folder,file))
+            self.data.append(entry["obs"][1])
+            self.targets.append(entry["pseudo_gt_1"])
 
         # self.data = np.vstack(self.data).reshape(-1, 3, 32, 32)
         # self.data = self.data.transpose((0, 2, 3, 1))  # convert to HWC
@@ -98,7 +99,7 @@ class RLBenchPhone(VisionDataset):
 
 
 
-class RLBenchPhoneDataModule(L.LightningDataModule):
+class RLBenchAllTasksDataModule(L.LightningDataModule):
     def __init__(self, root, batch_size, num_workers):
         super().__init__()
         self.root = root
@@ -136,26 +137,15 @@ class RLBenchPhoneDataModule(L.LightningDataModule):
 
         # We want to split the training set into train and val. But we don't want transforms on val.
         # So we create two datasets, and make sure that the split is consistent between them.
-        train_dataset = RLBenchPhone(
+        dataset = RLBenchAllTasks(
             self.root, train=True, transform=train_transform
         )
-        val_dataset = RLBenchPhone(
-            self.root, train=True, transform=test_transform
-        )
-        generator = torch.Generator().manual_seed(42)
-        self.train_set, _ = torch.utils.data.random_split(
-            train_dataset, [400, 50], generator=generator
-        )
-        train_val_set, val_set = torch.utils.data.random_split(
-            val_dataset, [400, 50], generator=generator
-        )
-        self.train_val_set = train_val_set
-        self.val_set = val_set
 
-        # Test set.
-        self.test_set = RLBenchPhone(
-            self.root, train=False, transform=test_transform
+        generator = torch.Generator().manual_seed(42)
+        self.train_set, self.val_set, self.test_set = torch.utils.data.random_split(
+            dataset, [679, 194, 96], generator=generator
         )
+
 
     def train_dataloader(self):
         return data.DataLoader(
@@ -170,7 +160,7 @@ class RLBenchPhoneDataModule(L.LightningDataModule):
     def val_dataloader(self):
         return [
             data.DataLoader(
-                self.train_val_set,
+                self.train_set,
                 batch_size=self.batch_size,
                 shuffle=False,
                 drop_last=False,

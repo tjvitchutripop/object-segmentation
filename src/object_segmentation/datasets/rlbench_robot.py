@@ -11,7 +11,7 @@ import pickle
 from PIL import Image
 
 
-class RLBenchPhone(VisionDataset):
+class RLBenchRobot(VisionDataset):
     """
     Args:
         root (string): Root directory of dataset where directory
@@ -25,9 +25,13 @@ class RLBenchPhone(VisionDataset):
 
     """
 
-    base_folder = "pseudogt-phone-py"
-    train_range = (0,450)
-    test_range = (450,500)
+    base_folder = "rlbench-robot-py"
+    generator = torch.Generator().manual_seed(12)
+    perm = torch.randperm(9767, generator=generator)
+    
+    # Train:Val:Test = 70:20:10
+    train_indices = perm[:8790]
+    test_indices = perm[8790:]
 
     def __init__(
         self,
@@ -42,30 +46,20 @@ class RLBenchPhone(VisionDataset):
         self.train = train  # training set or test set
 
         if self.train:
-            data_range = range(self.train_range[0],self.train_range[1])
+            indices = self.train_indices
         else:
-            data_range = range(self.test_range[0],self.test_range[1])
+            indices = self.test_indices
 
         self.data: Any = []
         self.targets = []
+
         # now load the picked numpy arrays
-        for idx in data_range:
-            file_path = os.path.join(self.root, self.base_folder, "phone_on_base-method1-"+str(idx)+"-action_object.npz")
-            entry = np.load(file_path)
-            self.data.append(entry["rgb"])
-            self.targets.append(entry["gt"])
-
-        # self.data = np.vstack(self.data).reshape(-1, 3, 32, 32)
-        # self.data = self.data.transpose((0, 2, 3, 1))  # convert to HWC
-
-    #     self._load_meta()
-
-    # def _load_meta(self) -> None:
-    #     path = os.path.join(self.root, self.base_folder, self.meta["filename"])
-    #     with open(path, "rb") as infile:
-    #         data = pickle.load(infile, encoding="latin1")
-    #         self.classes = data[self.meta["key"]]
-    #     self.class_to_idx = {_class: i for i, _class in enumerate(self.classes)}
+        for idx, filename in enumerate(os.listdir(os.path.join(self.root, self.base_folder))):
+            if idx in indices:
+                filepath = os.path.join(self.root, self.base_folder,filename)
+                entry = np.load(filepath)
+                self.data.append(entry["rgb"])
+                self.targets.append(entry["mask"])
 
     def __getitem__(self, index: int) -> Tuple[Any, Any]:
         """
@@ -98,7 +92,7 @@ class RLBenchPhone(VisionDataset):
 
 
 
-class RLBenchPhoneDataModule(L.LightningDataModule):
+class RLBenchRobotDataModule(L.LightningDataModule):
     def __init__(self, root, batch_size, num_workers):
         super().__init__()
         self.root = root
@@ -136,24 +130,24 @@ class RLBenchPhoneDataModule(L.LightningDataModule):
 
         # We want to split the training set into train and val. But we don't want transforms on val.
         # So we create two datasets, and make sure that the split is consistent between them.
-        train_dataset = RLBenchPhone(
+        train_dataset = RLBenchRobot(
             self.root, train=True, transform=train_transform
         )
-        val_dataset = RLBenchPhone(
+        val_dataset = RLBenchRobot(
             self.root, train=True, transform=test_transform
         )
         generator = torch.Generator().manual_seed(42)
         self.train_set, _ = torch.utils.data.random_split(
-            train_dataset, [400, 50], generator=generator
+            train_dataset, [6837, 1953], generator=generator
         )
         train_val_set, val_set = torch.utils.data.random_split(
-            val_dataset, [400, 50], generator=generator
+            val_dataset, [6837, 1953], generator=generator
         )
         self.train_val_set = train_val_set
         self.val_set = val_set
 
         # Test set.
-        self.test_set = RLBenchPhone(
+        self.test_set = RLBenchRobot(
             self.root, train=False, transform=test_transform
         )
 
