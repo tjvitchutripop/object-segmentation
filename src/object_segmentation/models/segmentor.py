@@ -27,6 +27,7 @@ class SegmentorTrainingModule(L.LightningModule):
         imgs, target = batch
         preds = self.network(imgs)
         preds = preds["out"].squeeze()
+        target = target.squeeze()
         # print("preds", preds.shape)
         # print("target", target.shape)
         loss = F.binary_cross_entropy_with_logits(preds.float(), target.float())

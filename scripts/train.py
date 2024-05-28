@@ -17,7 +17,7 @@ from object_segmentation.datasets.rlbench_pegs import RLBenchPegsDataModule
 from object_segmentation.datasets.pseudogt_shape import PseudoGTShapeDataModule
 from object_segmentation.datasets.pseudogt_pegs import PseudoGTPegsDataModule
 from object_segmentation.datasets.pseudogt_phone import PseudoGTPhoneDataModule
-from object_segmentation.datasets.rlbench_alltasks import RLBenchAllTasksDataModule
+from object_segmentation.datasets.rlbench_alltasks_multi import RLBenchAllTasksDataModule
 from object_segmentation.models.classifier import ClassifierTrainingModule
 from object_segmentation.models.segmentor import SegmentorTrainingModule
 from object_segmentation.utils.script_utils import (

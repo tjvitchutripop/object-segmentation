@@ -11,7 +11,7 @@ from object_segmentation.datasets.rlbench_phone import RLBenchPhoneDataModule
 from object_segmentation.datasets.rlbench_wine import RLBenchWineDataModule
 from object_segmentation.datasets.rlbench_robot import RLBenchRobotDataModule
 from object_segmentation.datasets.rlbench_shape import RLBenchShapeDataModule
-from object_segmentation.datasets.rlbench_alltasks import RLBenchAllTasksDataModule
+from object_segmentation.datasets.rlbench_alltasks_multi import RLBenchAllTasksDataModule
 from object_segmentation.datasets.rlbench_pegs import RLBenchPegsDataModule
 from object_segmentation.metrics.segmentation import get_metrics
 from object_segmentation.models.classifier import ClassifierInferenceModule
@@ -113,7 +113,7 @@ def main(cfg):
     #     ckpt_file = artifact.get_path("model.ckpt").download(root=artifact_dir)
     # else:
 
-    ckpt_file = "/home/tj/Documents/segmentation-model/object-segmentation/logs/train_rlbenchalltasks/2023-10-31/13-22-48/checkpoints/epoch=791-step=133848.ckpt"
+    ckpt_file = "/home/tj/Documents/segmentation-model/object-segmentation/logs/train_rlbenchalltasks/2024-04-17/22-39-51/checkpoints/epoch=24-step=67775.ckpt"
 
     # Load the network weights.
     ckpt = torch.load(ckpt_file)
@@ -161,17 +161,23 @@ def main(cfg):
     # function is.
     ######################################################################
 
-    train_outputs, val_outputs, test_outputs = trainer.predict(
+    # train_outputs, val_outputs, test_outputs = trainer.predict(
+    #     model,
+    #     dataloaders=[
+    #         *datamodule.val_dataloader(),  # There are two different loaders (train_val and val).
+    #         datamodule.test_dataloader(),
+    #     ],
+    # )
+    test_outputs = trainer.predict(
         model,
         dataloaders=[
-            *datamodule.val_dataloader(),  # There are two different loaders (train_val and val).
             datamodule.test_dataloader(),
         ],
     )
 
     for outputs_list, name in [
-        (train_outputs, "train"),
-        (val_outputs, "val"),
+        # (train_outputs, "train"),
+        # (val_outputs, "val"),
         (test_outputs, "test"),
     ]:
         # Put everything on CPU, and flatten a list of dicts into one dict.
@@ -187,6 +193,7 @@ def main(cfg):
             columns = ["image","ground truth","prediction"]
             sigmoid_func = torch.nn.Sigmoid()
             predictions = sigmoid_func(outputs["preds"]["out"].squeeze().to(torch.float32))
+            # Log 50 random samples.
             data = [
                 [wandb.Image(x_i),
                  wandb.Image(x_i, masks={
@@ -199,7 +206,7 @@ def main(cfg):
                         "mask_data" : np.where(y_pred>0.5,1,0),
                     }
                 })]
-                for x_i, y_i, y_pred in list(zip(outputs["imgs"].cpu(), outputs["target"].cpu().numpy(), predictions.cpu().numpy()))
+                for x_i, y_i, y_pred in list(zip(outputs["imgs"][:50].cpu(), outputs["target"][:50].cpu().numpy(), predictions[:50].cpu().numpy()))
             ]
             table = wandb.Table(columns=columns, data=data)
             run.log({f"{name}_result_table": table})
